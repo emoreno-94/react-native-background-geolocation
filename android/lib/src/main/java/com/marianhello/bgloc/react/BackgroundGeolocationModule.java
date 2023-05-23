@@ -6,6 +6,7 @@ import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.Callback;
 import com.facebook.react.bridge.LifecycleEventListener;
 import com.facebook.react.bridge.ReactApplicationContext;
+import com.facebook.react.bridge.ReactContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.ReadableMap;
@@ -47,6 +48,7 @@ public class BackgroundGeolocationModule extends ReactContextBaseJavaModule impl
 
     private BackgroundGeolocationFacade facade;
     private org.slf4j.Logger logger;
+    private ReactContext currentContext;
 
     public static class ErrorMap {
         public static ReadableMap from(String message, int code) {
@@ -84,9 +86,10 @@ public class BackgroundGeolocationModule extends ReactContextBaseJavaModule impl
 
     public BackgroundGeolocationModule(ReactApplicationContext reactContext) {
         super(reactContext);
-        reactContext.addLifecycleEventListener(this);
+        currentContext = reactContext;
+        currentContext.addLifecycleEventListener(this);
 
-        facade = new BackgroundGeolocationFacade(getContext(), this);
+        facade = new BackgroundGeolocationFacade(currentContext, this);
         logger = LoggerManager.getLogger(BackgroundGeolocationModule.class);
     }
 
@@ -125,6 +128,13 @@ public class BackgroundGeolocationModule extends ReactContextBaseJavaModule impl
         logger.info("Destroying plugin");
         facade.destroy();
 //        facade = null;
+    }
+
+    @Override
+    public void onCatalystInstanceDestroy() {
+        super.onCatalystInstanceDestroy();
+        logger.info("Destroying plugin facade");
+        facade.destroy();
     }
 
     private void runOnBackgroundThread(Runnable runnable) {
@@ -323,9 +333,14 @@ public class BackgroundGeolocationModule extends ReactContextBaseJavaModule impl
     }
 
     private void sendEvent(String eventName, Object params) {
-        getReactApplicationContext()
-                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                .emit(eventName, params);
+        try {
+            currentContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                    .emit(eventName, params);
+        }
+        catch (Exception e){
+            logger.debug("error sending event: {}", e.toString());
+        }
+
     }
 
     private void sendError(PluginException error) {
@@ -348,8 +363,9 @@ public class BackgroundGeolocationModule extends ReactContextBaseJavaModule impl
         return facade.getAuthorizationStatus();
     }
 
-    public Context getContext() {
-        return getReactApplicationContext().getBaseContext();
+    public ReactContext getContext() {
+        // return getReactApplicationContext().getBaseContext();
+        return currentContext;
     }
 
     @Override
